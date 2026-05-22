@@ -53,6 +53,7 @@ export default function App() {
   const hlsRefs = useRef({})
   const rafRef = useRef(null)
   const hoverTimer = useRef(null)
+  const lastTickRef = useRef(0)
 
   // Rolling buffers for each camera (for review mode)
   const rollingBuffers = useRef({
@@ -126,23 +127,26 @@ export default function App() {
   }, [])
 
   // ── RAF tick ──────────────────────────────────────────────────────────
-  const tick = useCallback(() => {
-    const video = videoRefs.current[activeCamera]
-    if (video) {
-      setCurrentTime(video.currentTime)
-      setIsPaused(video.paused)
+  const tick = useCallback((now) => {
+    if (now - lastTickRef.current > 100) {
+      lastTickRef.current = now
+      const video = videoRefs.current[activeCamera]
+      if (video) {
+        setCurrentTime(video.currentTime)
+        setIsPaused(video.paused)
 
-      if (modeRef.current === 'live') {
-        const hls = hlsRefs.current[activeCamera]
-        if (hls) {
-          const syncPos = hls.liveSyncPosition
-          if (syncPos != null && Number.isFinite(syncPos)) setLiveEdge(syncPos)
+        if (modeRef.current === 'live') {
+          const hls = hlsRefs.current[activeCamera]
+          if (hls) {
+            const syncPos = hls.liveSyncPosition
+            if (syncPos != null && Number.isFinite(syncPos)) setLiveEdge(syncPos)
+          }
         }
-      }
 
-      if (video.buffered.length > 0) {
-        setBufferStart(video.buffered.start(0))
-        setBufferedEnd(video.buffered.end(video.buffered.length - 1))
+        if (video.buffered.length > 0) {
+          setBufferStart(video.buffered.start(0))
+          setBufferedEnd(video.buffered.end(video.buffered.length - 1))
+        }
       }
     }
     rafRef.current = requestAnimationFrame(tick)
@@ -231,7 +235,10 @@ export default function App() {
         .then(r => r.json())
         .then(syncData => {
           if (syncData[targetCam]?.time != null) {
-            videoRefs.current[targetCam].currentTime = syncData[targetCam].time
+            const targetTime = syncData[targetCam].time
+            if (Math.abs(videoRefs.current[targetCam].currentTime - targetTime) > 0.5) {
+              videoRefs.current[targetCam].currentTime = targetTime
+            }
           }
         })
         .catch(() => { /* target already playing at its own live position */ })
