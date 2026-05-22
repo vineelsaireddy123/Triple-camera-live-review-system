@@ -162,10 +162,8 @@ export default function App() {
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         setStatus('playing')
-        // Only auto-play the active camera
-        if (cam === activeCamera) {
-          video.play().catch(() => { })
-        }
+        // Play ALL cameras so their buffers stay hot for instant switching
+        video.play().catch(() => { })
       })
 
       // Capture fragment bytes for review mode
@@ -201,44 +199,17 @@ export default function App() {
     })
 
     setModeBoth('live')
-  }, [setModeBoth, activeCamera])
+  }, [setModeBoth])
 
   // ── Camera switching ──────────────────────────────────────────────────
-  const switchCamera = useCallback(async (targetCam) => {
+  const switchCamera = useCallback((targetCam) => {
     if (targetCam === activeCamera) return
 
     const currentVideo = videoRefs.current[activeCamera]
     const targetVideo = videoRefs.current[targetCam]
     if (!currentVideo || !targetVideo) return
 
-    if (modeRef.current === 'live') {
-      // Use sync API to find matching position
-      const currentTimePos = currentVideo.currentTime
-      try {
-        const res = await fetch(
-          `${API_BASE}/sync?from_camera=${activeCamera}&from_time=${currentTimePos}`
-        )
-        const syncData = await res.json()
-        if (syncData[targetCam]) {
-          targetVideo.currentTime = syncData[targetCam].time
-        }
-      } catch (e) {
-        // Fallback: use same time
-        targetVideo.currentTime = currentTimePos
-      }
-
-      // Play target, mute transition
-      if (!currentVideo.paused) {
-        targetVideo.play().catch(() => { })
-      }
-    } else {
-      // Review mode: just use current time position
-      targetVideo.currentTime = currentVideo.currentTime
-      if (!currentVideo.paused) {
-        targetVideo.play().catch(() => { })
-      }
-    }
-
+    // INSTANT visual switch — no blocking await
     setActiveCamera(targetCam)
 
     // Update live segments for new camera
@@ -248,6 +219,26 @@ export default function App() {
       start: s.originalStart,
       end: s.originalStart + s.duration,
     })))
+
+    if (modeRef.current === 'live') {
+      // Target is already playing (all cameras auto-play), just sync position
+      const currentTimePos = currentVideo.currentTime
+      // Fire-and-forget sync — doesn't block the switch
+      fetch(`${API_BASE}/sync?from_camera=${activeCamera}&from_time=${currentTimePos}`)
+        .then(r => r.json())
+        .then(syncData => {
+          if (syncData[targetCam]?.time != null) {
+            videoRefs.current[targetCam].currentTime = syncData[targetCam].time
+          }
+        })
+        .catch(() => { /* target already playing at its own live position */ })
+    } else {
+      // Review mode: sync to same time position
+      targetVideo.currentTime = currentVideo.currentTime
+      if (!currentVideo.paused) {
+        targetVideo.play().catch(() => { })
+      }
+    }
   }, [activeCamera])
 
   // ── Enter review mode ─────────────────────────────────────────────────
