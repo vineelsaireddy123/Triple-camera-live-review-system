@@ -113,6 +113,9 @@ export default function App() {
 
     // Poll status
     const statusInterval = setInterval(() => {
+      // Pause network requests during review mode
+      if (modeRef.current === 'review') return
+
       fetch(`${API_BASE}/status`)
         .then(r => r.json())
         .then(setStreamStatus)
@@ -427,11 +430,17 @@ export default function App() {
       } else if (e.key === 'r' || e.key === 'R') {
         if (mode === 'live') enterReview()
         else exitReview()
+      } else if (e.key === '1') {
+        switchCamera('source')
+      } else if (e.key === '2') {
+        switchCamera('sink')
+      } else if (e.key === '3') {
+        switchCamera('hq')
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [handlePrevEvent, handleNextEvent, activeCamera, mode, enterReview, exitReview])
+  }, [handlePrevEvent, handleNextEvent, activeCamera, mode, enterReview, exitReview, switchCamera])
 
   // ── Controls ──────────────────────────────────────────────────────────
   const handleGoLive = useCallback(() => {
